@@ -17,6 +17,7 @@ normalize_line("9-5pm")        # "09:00-17:00"
 normalize_line("0900-1730")    # "09:00-17:30"
 normalize_line("9 to 5:30")    # "09:00-17:30"
 normalize_line("12am-1am")     # "00:00-01:00"
+normalize_line("22:00-06:00")  # "22:00-06:00" (overnight shift)
 ```
 
 `normalize_line` is a thin wrapper over `parse_range` (which returns a pair of
@@ -53,10 +54,12 @@ python -m unittest discover
 - `:`, `.`, `,` as hour/minute separators, plus bare military digits (`0930`, `930`)
 - am/pm markers in any of `9am`, `9 am`, `9a.m.`
 - a missing am/pm on one side of a range, inferred from the other side (`9-5pm` -> `09:00-17:00`)
+- overnight shifts that cross midnight, when the range is already unambiguous
+  (`22:00-06:00`, `2200-0600`, `10pm-6am`) - the output keeps the end time
+  smaller than the start time rather than forcing it onto the same day
 
 ## What it doesn't handle yet
 
-- overnight shifts where the end time is on the next day (`22:00-06:00`)
 - day-of-week or date prefixes on an entry
 - computing duration or flagging overlapping entries
 
