@@ -14,6 +14,20 @@ _MILITARY_RE = re.compile(r"^(\d{3,4})$")
 _HOUR_ONLY_RE = re.compile(r"^(\d{1,2})$")
 _SEPARATOR_RE = re.compile(r"\s*(?:-|–|—|~|\bto\b|\buntil\b)\s*", re.IGNORECASE)
 
+_WEEKDAY_NAMES = {
+    "mon": "Monday", "monday": "Monday",
+    "tue": "Tuesday", "tues": "Tuesday", "tuesday": "Tuesday",
+    "wed": "Wednesday", "weds": "Wednesday", "wednesday": "Wednesday",
+    "thu": "Thursday", "thur": "Thursday", "thurs": "Thursday", "thursday": "Thursday",
+    "fri": "Friday", "friday": "Friday",
+    "sat": "Saturday", "saturday": "Saturday",
+    "sun": "Sunday", "sunday": "Sunday",
+}
+# A leading label followed by required whitespace (an optional comma may sit
+# between). This has to require trailing whitespace so it never eats part of
+# a bare range like "0900-1730" or "22:00-06:00", which have no space at all.
+_PREFIX_RE = re.compile(r"^([A-Za-z]{3,9}|\d{1,2}/\d{1,2}(?:/\d{2,4})?|\d{4}-\d{2}-\d{2})\s*,?\s+")
+
 
 class ParseError(ValueError):
     """Raised when a time or range can't be made sense of."""
@@ -127,3 +141,70 @@ def format_range(start, end):
 def normalize_line(raw):
     """Parse then re-render a messy range in one step."""
     return format_range(*parse_range(raw))
+
+
+def _canonical_label(label):
+    """Turn a matched prefix into its canonical form, or None if it's bogus.
+
+    The prefix regex is deliberately loose (any 3-9 letter word, any
+    slash/dash-separated digits) so this is where real validation happens -
+    a weekday must be a real weekday, and a numeric date must have a month
+    and day in range.
+    """
+    lower = label.lower()
+    if lower in _WEEKDAY_NAMES:
+        return _WEEKDAY_NAMES[lower]
+
+    if "/" in label:
+        bits = label.split("/")
+        if len(bits) not in (2, 3):
+            return None
+        month, day = int(bits[0]), int(bits[1])
+        if 1 <= month <= 12 and 1 <= day <= 31:
+            return label
+        return None
+
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", label):
+        _, month, day = (int(part) for part in label.split("-"))
+        if 1 <= month <= 12 and 1 <= day <= 31:
+            return label
+        return None
+
+    return None
+
+
+def split_entry_prefix(raw):
+    """Split a leading day-of-week or date label off an entry, if present.
+
+    Returns (label, remainder). "Mon 9-5", "Monday, 9-5", "3/14 9-5", and
+    "2026-03-14 9-5" all yield a label and a bare range as the remainder.
+    Anything else - including a range with no prefix at all - yields
+    (None, raw.strip()) so callers can hand the remainder straight to
+    parse_range.
+    """
+    text = raw.strip()
+    match = _PREFIX_RE.match(text)
+    if not match:
+        return None, text
+    label = _canonical_label(match.group(1))
+    if label is None:
+        return None, text
+    return label, text[match.end():].strip()
+
+
+def parse_entry(raw):
+    """Parse an entry that may start with a day-of-week or date label.
+
+    Returns (label, start, end); label is None when the entry is a bare
+    range with no prefix.
+    """
+    label, remainder = split_entry_prefix(raw)
+    start, end = parse_range(remainder)
+    return label, start, end
+
+
+def normalize_entry(raw):
+    """Parse then re-render a messy entry, keeping any leading day/date label."""
+    label, start, end = parse_entry(raw)
+    range_str = format_range(start, end)
+    return f"{label} {range_str}" if label else range_str

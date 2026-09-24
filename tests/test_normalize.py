@@ -1,6 +1,6 @@
 import unittest
 
-from timesheet_fmt import ParseError, normalize_line
+from timesheet_fmt import ParseError, normalize_entry, normalize_line, split_entry_prefix
 
 # Each row is (raw input, expected normalized output). Kept as one flat table
 # so a new awkward case can be added without touching any test logic.
@@ -39,6 +39,30 @@ INVALID_CASES = [
     "9:60-17:00",
 ]
 
+# Entries with a leading day-of-week or date label.
+ENTRY_CASES = [
+    ("Mon 9-5", "Monday 09:00-17:00"),
+    ("mon 9-5", "Monday 09:00-17:00"),
+    ("Monday, 9-5pm", "Monday 09:00-17:00"),
+    ("Tues 9am-5pm", "Tuesday 09:00-17:00"),
+    ("Weds 9-5", "Wednesday 09:00-17:00"),
+    ("Thurs 9-5", "Thursday 09:00-17:00"),
+    ("Sat 22:00-06:00", "Saturday 22:00-06:00"),
+    ("3/14 9-5", "3/14 09:00-17:00"),
+    ("3/14/2026 9-5", "3/14/2026 09:00-17:00"),
+    ("2026-03-14 9-5", "2026-03-14 09:00-17:00"),
+    # no recognizable prefix - falls back to a bare range
+    ("9-5", "09:00-17:00"),
+]
+
+# Entries whose leading word looks like a prefix but isn't one, so the
+# whole string should be handed to the range parser and fail there.
+INVALID_ENTRY_CASES = [
+    "13/14 9-5",  # month out of range
+    "2026-13-14 9-5",  # month out of range
+    "Someday 9-5",  # not a real weekday
+]
+
 
 class NormalizeLineTests(unittest.TestCase):
     def test_normalize_cases(self):
@@ -51,6 +75,22 @@ class NormalizeLineTests(unittest.TestCase):
             with self.subTest(raw=raw):
                 with self.assertRaises(ParseError):
                     normalize_line(raw)
+
+
+class NormalizeEntryTests(unittest.TestCase):
+    def test_entry_cases(self):
+        for raw, expected in ENTRY_CASES:
+            with self.subTest(raw=raw):
+                self.assertEqual(normalize_entry(raw), expected)
+
+    def test_invalid_entry_cases_raise(self):
+        for raw in INVALID_ENTRY_CASES:
+            with self.subTest(raw=raw):
+                with self.assertRaises(ParseError):
+                    normalize_entry(raw)
+
+    def test_split_entry_prefix_no_match_returns_stripped_input(self):
+        self.assertEqual(split_entry_prefix("  9-5  "), (None, "9-5"))
 
 
 if __name__ == "__main__":

@@ -11,26 +11,33 @@ library and CLI that takes any of those and turns it into `HH:MM-HH:MM`.
 As a library:
 
 ```python
-from timesheet_fmt import normalize_line
+from timesheet_fmt import normalize_line, normalize_entry
 
 normalize_line("9-5pm")        # "09:00-17:00"
 normalize_line("0900-1730")    # "09:00-17:30"
 normalize_line("9 to 5:30")    # "09:00-17:30"
 normalize_line("12am-1am")     # "00:00-01:00"
 normalize_line("22:00-06:00")  # "22:00-06:00" (overnight shift)
+
+normalize_entry("Mon 9-5")           # "Monday 09:00-17:00"
+normalize_entry("3/14 9am-5pm")      # "3/14 09:00-17:00"
+normalize_entry("2026-03-14, 9-5")   # "2026-03-14 09:00-17:00"
 ```
 
 `normalize_line` is a thin wrapper over `parse_range` (which returns a pair of
 `datetime.time`) and `format_range` (which renders them back to text), so you
 can use either half on its own if you need the parsed values rather than a
-string.
+string. `normalize_entry` does the same but first strips off an optional
+leading day-of-week or date label via `split_entry_prefix`/`parse_entry`, so
+an entry with no label behaves exactly like `normalize_line`.
 
 From the command line:
 
 ```
-$ python -m timesheet_fmt.cli "9-5pm" "0900-1730"
+$ python -m timesheet_fmt.cli "9-5pm" "0900-1730" "Mon 9-5"
 09:00-17:00
 09:00-17:30
+Monday 09:00-17:00
 
 $ echo "9 to 5:30" | python -m timesheet_fmt.cli
 09:00-17:30
@@ -57,10 +64,13 @@ python -m unittest discover
 - overnight shifts that cross midnight, when the range is already unambiguous
   (`22:00-06:00`, `2200-0600`, `10pm-6am`) - the output keeps the end time
   smaller than the start time rather than forcing it onto the same day
+- an optional day-of-week or date label in front of the range (`Mon 9-5`,
+  `Tues, 9am-5pm`, `3/14 9-5`, `2026-03-14 9-5`) - weekday names are
+  normalized to their full spelling, dates are kept as written but checked
+  for a sane month and day
 
 ## What it doesn't handle yet
 
-- day-of-week or date prefixes on an entry
 - computing duration or flagging overlapping entries
 
 See the test table in `tests/test_normalize.py` for the exact cases currently

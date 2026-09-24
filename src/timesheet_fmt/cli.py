@@ -3,7 +3,7 @@
 import argparse
 import sys
 
-from .normalize import ParseError, normalize_line
+from .normalize import ParseError, normalize_entry
 
 
 def main(argv=None):
@@ -14,7 +14,10 @@ def main(argv=None):
     parser.add_argument(
         "entries",
         nargs="*",
-        help="time ranges to normalize, e.g. '9-5pm' (reads stdin if omitted)",
+        help=(
+            "time ranges to normalize, e.g. '9-5pm' or 'Mon 9-5pm' "
+            "(reads stdin if omitted)"
+        ),
     )
     args = parser.parse_args(argv)
 
@@ -26,7 +29,7 @@ def main(argv=None):
         if not raw:
             continue
         try:
-            print(normalize_line(raw))
+            print(normalize_entry(raw))
         except ParseError as exc:
             print(f"skip: {exc}", file=sys.stderr)
             exit_code = 1
